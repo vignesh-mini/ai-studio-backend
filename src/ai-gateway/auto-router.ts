@@ -34,18 +34,30 @@ export interface RoutableModel {
   tier: Plan;
 }
 
+/**
+ * Orders the models this user can use right now for the prompt: preferred models for
+ * the intent first, then every other allowed model. The tail is the fallback chain used
+ * when a provider is overloaded or down.
+ */
+export function rankAutoModels(
+  prompt: string,
+  candidates: RoutableModel[],
+  plan: Plan,
+): string[] {
+  const allowed = candidates
+    .filter((m) => plan === 'premium' || m.tier === 'free')
+    .map((m) => m.id);
+  const preferred = PREFERENCES[detectIntent(prompt)].filter((id) =>
+    allowed.includes(id),
+  );
+  return [...preferred, ...allowed.filter((id) => !preferred.includes(id))];
+}
+
 /** Picks the preferred model for the prompt among the ones this user can use right now. */
 export function pickAutoModel(
   prompt: string,
   candidates: RoutableModel[],
   plan: Plan,
 ) {
-  const allowed = candidates.filter(
-    (m) => plan === 'premium' || m.tier === 'free',
-  );
-  const allowedIds = new Set(allowed.map((m) => m.id));
-  return (
-    PREFERENCES[detectIntent(prompt)].find((id) => allowedIds.has(id)) ??
-    allowed[0]?.id
-  );
+  return rankAutoModels(prompt, candidates, plan)[0];
 }

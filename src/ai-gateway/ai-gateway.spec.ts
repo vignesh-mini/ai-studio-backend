@@ -1,4 +1,5 @@
-import { detectIntent, pickAutoModel } from './auto-router.js';
+import { isRetryableProviderError } from './ai-gateway.service.js';
+import { detectIntent, pickAutoModel, rankAutoModels } from './auto-router.js';
 import { ProviderError, SseDeltaParser } from './openai-compatible.js';
 
 describe('SseDeltaParser', () => {
@@ -61,5 +62,32 @@ describe('auto router', () => {
       pickAutoModel('hello', [{ id: 'mistral-small', tier: 'free' }], 'free'),
     ).toBe('mistral-small');
     expect(pickAutoModel('hello', [], 'free')).toBeUndefined();
+  });
+});
+
+describe('fallback chain', () => {
+  const models = [
+    { id: 'mistral-small', tier: 'free' as const },
+    { id: 'gemini-flash', tier: 'free' as const },
+    { id: 'groq-gpt-oss-120b', tier: 'free' as const },
+    { id: 'gemini-pro', tier: 'premium' as const },
+  ];
+
+  it('ranks preferred models first, then every other allowed model', () => {
+    expect(rankAutoModels('hello there', models, 'free')).toEqual([
+      'gemini-flash',
+      'groq-gpt-oss-120b',
+      'mistral-small',
+    ]);
+  });
+
+  it('retries on overload, rate limits and network errors, not on bad requests', () => {
+    expect(isRetryableProviderError(new ProviderError('busy', 503))).toBe(true);
+    expect(isRetryableProviderError(new ProviderError('quota', 429))).toBe(
+      true,
+    );
+    expect(isRetryableProviderError(new TypeError('fetch failed'))).toBe(true);
+    expect(isRetryableProviderError(new ProviderError('bad', 400))).toBe(false);
+    expect(isRetryableProviderError(new ProviderError('key', 401))).toBe(false);
   });
 });

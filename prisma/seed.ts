@@ -78,7 +78,8 @@ const models: Seed[] = [
     id: 'gemini-flash',
     name: 'Gemini Flash',
     providerId: 'gemini',
-    providerModel: 'gemini-2.5-flash',
+    // gemini-2.5 is closed to new keys; 3.5 Flash is current and responsive.
+    providerModel: 'gemini-3.5-flash',
     task: 'chat',
     description:
       'Default assistant. Great for general chat, images and documents.',
@@ -94,10 +95,11 @@ const models: Seed[] = [
     capabilities: ['fast', 'reasoning'],
   },
   {
+    // Id kept stable for the router and saved chats; Groq retired qwen3-32b.
     id: 'groq-qwen3-32b',
-    name: 'Qwen3 32B',
+    name: 'Qwen 3.8 27B',
     providerId: 'groq',
-    providerModel: 'qwen/qwen3-32b',
+    providerModel: 'qwen/qwen3.8-27b',
     task: 'chat',
     description: 'Strong coding and multilingual model with fast responses.',
     capabilities: ['coding', 'fast'],
@@ -124,7 +126,8 @@ const models: Seed[] = [
     id: 'gemini-pro',
     name: 'Gemini Pro',
     providerId: 'gemini',
-    providerModel: 'gemini-2.5-pro',
+    // Alias tracks the newest Pro; free Google keys have no Pro quota.
+    providerModel: 'gemini-pro-latest',
     task: 'chat',
     description: 'Highest-quality reasoning for complex problems.',
     tier: 'premium',

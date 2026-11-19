@@ -8,6 +8,7 @@ import type { Prisma } from '@prisma/client';
 import {
   type ResolvedModel,
   AiGatewayService,
+  isRetryableProviderError,
 } from '../ai-gateway/ai-gateway.service.js';
 import type { ChatTurn } from '../ai-gateway/openai-compatible.js';
 import { ProviderError } from '../ai-gateway/openai-compatible.js';
@@ -64,39 +65,56 @@ export class ChatService {
     return { user, dto, resolved, turns: buildContext(dto.messages) };
   }
 
-  /** Streams the reply, then saves it and records usage, even if the user pressed Stop. */
+  /**
+   * Streams the reply, then saves it and records usage, even if the user pressed Stop.
+   * With Auto, a provider that is busy or down before sending any text is skipped in
+   * favour of the next ranked model, so one overloaded provider does not fail the chat.
+   */
   async run(
     { user, dto, resolved, turns }: PreparedChat,
     emit: (event: ChatEvent) => void,
     signal: AbortSignal,
   ) {
+    const attempts = [resolved, ...resolved.fallbacks];
+    let answered = resolved;
     let reply = '';
     let status: 'done' | 'stopped' | 'error' = 'done';
 
-    try {
-      for await (const delta of this.gateway.streamChat(
-        resolved,
-        turns,
-        signal,
-      )) {
-        reply += delta;
-        emit({ type: 'token', text: delta });
-      }
-    } catch (error) {
-      if (signal.aborted) {
-        status = 'stopped';
-      } else {
-        status = 'error';
+    for (const [index, attempt] of attempts.entries()) {
+      answered = attempt;
+      try {
+        for await (const delta of this.gateway.streamChat(
+          attempt,
+          turns,
+          signal,
+        )) {
+          reply += delta;
+          emit({ type: 'token', text: delta });
+        }
+        break;
+      } catch (error) {
+        if (signal.aborted) {
+          status = 'stopped';
+          break;
+        }
         // Log the provider failure without the user's prompt.
         this.logger.warn(
-          `${resolved.model.providerId}/${resolved.model.providerModel} failed: ${(error as Error).message}`,
+          `${attempt.model.providerId}/${attempt.model.providerModel} failed: ${(error as Error).message}`,
         );
+        const canFallBack =
+          !reply &&
+          index < attempts.length - 1 &&
+          isRetryableProviderError(error);
+        if (canFallBack) continue;
+        status = 'error';
         emit({ type: 'error', message: this.publicError(error) });
+        break;
       }
     }
 
-    if (status === 'done') emit({ type: 'done', modelId: resolved.model.id });
+    if (status === 'done') emit({ type: 'done', modelId: answered.model.id });
     if (!reply) return;
+    resolved = answered;
 
     if (dto.conversationId && dto.assistantMessageId) {
       await this.prisma.message.upsert({

@@ -10,13 +10,27 @@ import {
   type CatalogueModel,
   ModelsService,
 } from '../models/models.service.js';
-import { pickAutoModel } from './auto-router.js';
-import { type ChatTurn, streamChatCompletion } from './openai-compatible.js';
+import { rankAutoModels } from './auto-router.js';
+import {
+  type ChatTurn,
+  ProviderError,
+  streamChatCompletion,
+} from './openai-compatible.js';
 
 export interface ResolvedModel {
   model: CatalogueModel;
   apiKey: string;
+  /** Auto only: models to try in order if this one is overloaded or down. */
+  fallbacks: ResolvedModel[];
 }
+
+/** Rate limits, provider outages and network failures are worth trying elsewhere. */
+export const isRetryableProviderError = (error: unknown) =>
+  !(error instanceof ProviderError) ||
+  error.status === undefined ||
+  error.status === 408 ||
+  error.status === 429 ||
+  error.status >= 500;
 
 // Optional attribution headers some providers ask for.
 const PROVIDER_HEADERS: Record<string, Record<string, string>> = {
@@ -41,19 +55,22 @@ export class AiGatewayService {
       (m) => m.task === 'chat',
     );
 
-    let modelId = requestedId;
     if (requestedId === AUTO_MODEL_ID) {
       const candidates = chatModels.filter(
         (m) => m.id !== AUTO_MODEL_ID && m.available,
       );
-      modelId = pickAutoModel(prompt, candidates, plan) ?? '';
-      if (!modelId) {
+      const [first, ...rest] = rankAutoModels(prompt, candidates, plan).map(
+        (id) => this.toResolved(candidates.find((m) => m.id === id)!),
+      );
+      if (!first) {
         throw new ServiceUnavailableException(
           'No AI provider is configured. Add an API key to the backend .env file.',
         );
       }
+      return { ...first, fallbacks: rest };
     }
 
+    const modelId = requestedId;
     const model = chatModels.find((m) => m.id === modelId);
     if (!model || model.id === AUTO_MODEL_ID)
       throw new NotFoundException(`Unknown model "${modelId}"`);
@@ -68,7 +85,15 @@ export class AiGatewayService {
         `${model.name} is not available right now`,
       );
     }
-    return { model, apiKey };
+    return { model, apiKey, fallbacks: [] };
+  }
+
+  private toResolved(model: CatalogueModel): ResolvedModel {
+    return {
+      model,
+      apiKey: this.models.apiKeyFor(model.provider)!,
+      fallbacks: [],
+    };
   }
 
   streamChat(
