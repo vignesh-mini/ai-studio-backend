@@ -1,4 +1,7 @@
-import { isRetryableProviderError } from './ai-gateway.service.js';
+import {
+  AiGatewayService,
+  isRetryableProviderError,
+} from './ai-gateway.service.js';
 import { detectIntent, pickAutoModel, rankAutoModels } from './auto-router.js';
 import { ProviderError, SseDeltaParser } from './openai-compatible.js';
 
@@ -89,5 +92,55 @@ describe('fallback chain', () => {
     expect(isRetryableProviderError(new TypeError('fetch failed'))).toBe(true);
     expect(isRetryableProviderError(new ProviderError('bad', 400))).toBe(false);
     expect(isRetryableProviderError(new ProviderError('key', 401))).toBe(false);
+  });
+});
+
+describe('streamChatGuarded', () => {
+  const gateway = new AiGatewayService({} as never);
+  const resolved = {} as never;
+
+  const hangingStream = async function* (
+    _r: unknown,
+    _m: unknown,
+    signal: AbortSignal,
+  ): AsyncGenerator<string> {
+    await new Promise((_, reject) =>
+      signal.addEventListener('abort', () => reject(new Error('aborted'))),
+    );
+    yield '';
+  };
+
+  it('gives up on a provider that never starts answering', async () => {
+    vi.spyOn(gateway, 'streamChat').mockImplementation(hangingStream as never);
+    const run = async () => {
+      for await (const _ of gateway.streamChatGuarded(
+        resolved,
+        [],
+        new AbortController().signal,
+        20,
+      ));
+    };
+    const error = await run().catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ProviderError);
+    expect((error as ProviderError).status).toBe(504);
+    expect(isRetryableProviderError(error)).toBe(true);
+  });
+
+  it('does not time out once text is streaming', async () => {
+    vi.spyOn(gateway, 'streamChat').mockImplementation(async function* () {
+      yield 'Hel';
+      await new Promise((r) => setTimeout(r, 40));
+      yield 'lo';
+    } as never);
+    let text = '';
+    for await (const delta of gateway.streamChatGuarded(
+      resolved,
+      [],
+      new AbortController().signal,
+      20,
+    )) {
+      text += delta;
+    }
+    expect(text).toBe('Hello');
   });
 });

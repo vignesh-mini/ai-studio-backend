@@ -1,12 +1,19 @@
 import type { Plan } from '@prisma/client';
 
-export type Intent = 'coding' | 'reasoning' | 'general';
+/** `fast` is never detected from a prompt; callers pass it for quick utility tasks. */
+export type Intent = 'coding' | 'reasoning' | 'general' | 'fast';
 
 // Initial routing table. It is code for now; Phase 7 moves it to the admin panel.
 const PREFERENCES: Record<Intent, string[]> = {
   coding: ['groq-qwen3-32b', 'mistral-small', 'gemini-flash'],
   reasoning: ['groq-gpt-oss-120b', 'gemini-pro', 'gemini-flash'],
   general: ['gemini-flash', 'groq-gpt-oss-120b', 'openrouter-llama-free'],
+  fast: [
+    'groq-gpt-oss-120b',
+    'groq-qwen3-32b',
+    'mistral-small',
+    'gemini-flash',
+  ],
 };
 
 export function detectIntent(prompt: string): Intent {
@@ -43,13 +50,12 @@ export function rankAutoModels(
   prompt: string,
   candidates: RoutableModel[],
   plan: Plan,
+  intent: Intent = detectIntent(prompt),
 ): string[] {
   const allowed = candidates
     .filter((m) => plan === 'premium' || m.tier === 'free')
     .map((m) => m.id);
-  const preferred = PREFERENCES[detectIntent(prompt)].filter((id) =>
-    allowed.includes(id),
-  );
+  const preferred = PREFERENCES[intent].filter((id) => allowed.includes(id));
   return [...preferred, ...allowed.filter((id) => !preferred.includes(id))];
 }
 

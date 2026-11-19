@@ -135,10 +135,12 @@ export class ImagesService implements OnModuleInit {
   }
 
   async enhancePrompt(user: AuthUser, prompt: string) {
+    // Rewriting a prompt needs speed more than depth, so prefer the fastest models.
     const resolved = await this.gateway.resolveChatModel(
       'auto',
       user.plan,
       prompt,
+      'fast',
     );
     const text = await this.gateway.completeText(resolved, [
       { role: 'system', content: ENHANCE_PROMPT },

@@ -18,6 +18,9 @@ import { UsageService } from '../usage/usage.service.js';
 import type { SendMessageDto } from './chat.dto.js';
 import { buildContext, estimateTokens, titleFrom } from './context.js';
 
+/** How long a provider may take to start answering before Auto tries the next one. */
+const FIRST_TOKEN_TIMEOUT_MS = 15_000;
+
 export type ChatEvent =
   | { type: 'token'; text: string }
   | { type: 'done'; modelId: string }
@@ -83,10 +86,11 @@ export class ChatService {
     for (const [index, attempt] of attempts.entries()) {
       answered = attempt;
       try {
-        for await (const delta of this.gateway.streamChat(
+        for await (const delta of this.gateway.streamChatGuarded(
           attempt,
           turns,
           signal,
+          FIRST_TOKEN_TIMEOUT_MS,
         )) {
           reply += delta;
           emit({ type: 'token', text: delta });
@@ -228,6 +232,8 @@ export class ChatService {
 
   private publicError(error: unknown) {
     if (error instanceof ProviderError) {
+      if (error.status === 504)
+        return 'The AI provider took too long to respond. Try again or pick another model.';
       if (error.status === 429)
         return 'The AI provider is busy (rate limit). Try again shortly or pick another model.';
       if (error.status === 401 || error.status === 403)

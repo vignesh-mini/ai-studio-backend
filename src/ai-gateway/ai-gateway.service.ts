@@ -10,7 +10,7 @@ import {
   type CatalogueModel,
   ModelsService,
 } from '../models/models.service.js';
-import { rankAutoModels } from './auto-router.js';
+import { type Intent, rankAutoModels } from './auto-router.js';
 import { generateCloudflareImage, IMAGE_SIZES } from './cloudflare-images.js';
 import {
   type ChatTurn,
@@ -52,6 +52,7 @@ export class AiGatewayService {
     requestedId: string,
     plan: Plan,
     prompt: string,
+    intent?: Intent,
   ): Promise<ResolvedModel> {
     const chatModels = (await this.models.catalogue()).filter(
       (m) => m.task === 'chat',
@@ -61,9 +62,12 @@ export class AiGatewayService {
       const candidates = chatModels.filter(
         (m) => m.id !== AUTO_MODEL_ID && m.available,
       );
-      const [first, ...rest] = rankAutoModels(prompt, candidates, plan).map(
-        (id) => this.toResolved(candidates.find((m) => m.id === id)!),
-      );
+      const [first, ...rest] = rankAutoModels(
+        prompt,
+        candidates,
+        plan,
+        intent,
+      ).map((id) => this.toResolved(candidates.find((m) => m.id === id)!));
       if (!first) {
         throw new ServiceUnavailableException(
           'No AI provider is configured. Add an API key to the backend .env file.',
@@ -118,10 +122,11 @@ export class AiGatewayService {
     for (const [index, attempt] of attempts.entries()) {
       try {
         let text = '';
-        for await (const delta of this.streamChat(
+        for await (const delta of this.streamChatGuarded(
           attempt,
           messages,
-          AbortSignal.timeout(30_000),
+          AbortSignal.timeout(25_000),
+          12_000,
         )) {
           text += delta;
         }
@@ -133,6 +138,47 @@ export class AiGatewayService {
       }
     }
     throw new ServiceUnavailableException();
+  }
+
+  /**
+   * streamChat with a time-to-first-token limit. Overloaded providers sometimes hang
+   * for a minute before failing; giving up early lets Auto fall back to the next
+   * model while the user is still waiting. The limit stops once text starts arriving.
+   */
+  async *streamChatGuarded(
+    resolved: ResolvedModel,
+    messages: ChatTurn[],
+    signal: AbortSignal,
+    firstTokenMs: number,
+  ): AsyncGenerator<string> {
+    const controller = new AbortController();
+    const forwardAbort = () => controller.abort(signal.reason);
+    if (signal.aborted) forwardAbort();
+    signal.addEventListener('abort', forwardAbort, { once: true });
+    const timeout = new ProviderError(
+      `No response within ${firstTokenMs / 1000}s`,
+      504,
+    );
+    const timer = setTimeout(() => controller.abort(timeout), firstTokenMs);
+
+    try {
+      for await (const delta of this.streamChat(
+        resolved,
+        messages,
+        controller.signal,
+      )) {
+        clearTimeout(timer);
+        yield delta;
+      }
+    } catch (error) {
+      // Surface the timeout itself (retryable) rather than the generic AbortError.
+      if (controller.signal.reason === timeout && !signal.aborted)
+        throw timeout;
+      throw error;
+    } finally {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', forwardAbort);
+    }
   }
 
   generateImage(
