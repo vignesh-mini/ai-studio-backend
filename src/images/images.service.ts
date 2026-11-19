@@ -3,7 +3,7 @@ import {
   AiGatewayService,
   type ResolvedModel,
 } from '../ai-gateway/ai-gateway.service.js';
-import type { AuthUser } from '../auth/decorators.js';
+import { type AuthUser, effectivePlan } from '../auth/decorators.js';
 import { JobQueue } from '../jobs/job-queue.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { StorageService } from '../storage/storage.service.js';
@@ -44,8 +44,11 @@ export class ImagesService implements OnModuleInit {
   }
 
   async createJob(user: AuthUser, dto: GenerateImageDto) {
-    const resolved = await this.gateway.resolveImageModel(dto.model, user.plan);
-    await this.usage.assertImageQuota(user.id, user.plan, dto.count);
+    const resolved = await this.gateway.resolveImageModel(
+      dto.model,
+      effectivePlan(user),
+    );
+    await this.usage.assertImageQuota(user, dto.count);
 
     const job = await this.prisma.generationJob.create({
       data: {
@@ -138,7 +141,7 @@ export class ImagesService implements OnModuleInit {
     // Rewriting a prompt needs speed more than depth, so prefer the fastest models.
     const resolved = await this.gateway.resolveChatModel(
       'auto',
-      user.plan,
+      effectivePlan(user),
       prompt,
       'fast',
     );

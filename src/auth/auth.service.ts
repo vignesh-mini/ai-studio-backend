@@ -68,7 +68,22 @@ export class AuthService {
     return this.createSession(stored.user);
   }
 
-  private async createSession(user: User) {
+  /**
+   * Owners are configured in OWNER_EMAILS, never from the app. The role is synced on
+   * every sign-in and refresh, so removing an email demotes the account.
+   */
+  private async syncRole(user: User): Promise<User> {
+    const owners = String(this.config.get('OWNER_EMAILS') ?? '')
+      .split(',')
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean);
+    const role = owners.includes(user.email) ? 'owner' : 'user';
+    if (user.role === role) return user;
+    return this.prisma.user.update({ where: { id: user.id }, data: { role } });
+  }
+
+  private async createSession(current: User) {
+    const user = await this.syncRole(current);
     const refreshToken = randomBytes(48).toString('base64url');
     const days = Number(this.config.get('REFRESH_TOKEN_DAYS') ?? 30);
     await this.prisma.refreshToken.create({
@@ -81,6 +96,7 @@ export class AuthService {
     const accessToken = await this.jwt.signAsync({
       sub: user.id,
       plan: user.plan,
+      role: user.role,
     });
     return { user: toUserDto(user), accessToken, refreshToken };
   }

@@ -6,4 +6,5 @@ export const toUserDto = (user: User) => ({
   name: user.name,
   email: user.email,
   plan: user.plan,
+  role: user.role,
 });

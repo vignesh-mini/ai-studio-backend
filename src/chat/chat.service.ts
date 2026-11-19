@@ -12,7 +12,7 @@ import {
 } from '../ai-gateway/ai-gateway.service.js';
 import type { ChatTurn } from '../ai-gateway/openai-compatible.js';
 import { ProviderError } from '../ai-gateway/openai-compatible.js';
-import type { AuthUser } from '../auth/decorators.js';
+import { type AuthUser, effectivePlan } from '../auth/decorators.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { UsageService } from '../usage/usage.service.js';
 import type { SendMessageDto } from './chat.dto.js';
@@ -57,10 +57,10 @@ export class ChatService {
       );
     }
 
-    await this.usage.assertChatQuota(user.id, user.plan);
+    await this.usage.assertChatQuota(user);
     const resolved = await this.gateway.resolveChatModel(
       dto.modelId,
-      user.plan,
+      effectivePlan(user),
       latest.content,
     );
     if (dto.conversationId) await this.syncHistory(user.id, dto);

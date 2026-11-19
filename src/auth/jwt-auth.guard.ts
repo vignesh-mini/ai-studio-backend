@@ -11,6 +11,7 @@ import { type AuthUser, IS_PUBLIC } from './decorators.js';
 interface AccessPayload {
   sub: string;
   plan: AuthUser['plan'];
+  role?: AuthUser['role'];
 }
 
 /** Registered globally: every route needs a valid access token unless marked @Public(). */
@@ -36,7 +37,12 @@ export class JwtAuthGuard implements CanActivate {
 
     try {
       const payload = await this.jwt.verifyAsync<AccessPayload>(token);
-      request.user = { id: payload.sub, plan: payload.plan } satisfies AuthUser;
+      request.user = {
+        id: payload.sub,
+        plan: payload.plan,
+        // Tokens issued before roles existed carry none.
+        role: payload.role ?? 'user',
+      } satisfies AuthUser;
       return true;
     } catch {
       throw new UnauthorizedException('Access token expired or invalid');

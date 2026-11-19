@@ -14,6 +14,12 @@ enum Plan {
   premium
 }
 
+/// `owner` (from OWNER_EMAILS) bypasses app quotas and plan gating.
+enum UserRole {
+  user
+  owner
+}
+
 enum Task {
   chat
   image
@@ -39,6 +45,7 @@ model User {
   name          String
   passwordHash  String?
   plan          Plan             @default(free)
+  role          UserRole         @default(user)
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
   refreshTokens RefreshToken[]

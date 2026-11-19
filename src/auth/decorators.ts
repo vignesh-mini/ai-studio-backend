@@ -3,12 +3,19 @@ import {
   type ExecutionContext,
   SetMetadata,
 } from '@nestjs/common';
-import type { Plan } from '@prisma/client';
+import type { Plan, UserRole } from '@prisma/client';
 
 export interface AuthUser {
   id: string;
   plan: Plan;
+  role: UserRole;
 }
+
+export const isOwner = (user: AuthUser) => user.role === 'owner';
+
+/** Owners get every model regardless of their billing plan. */
+export const effectivePlan = (user: AuthUser): Plan =>
+  isOwner(user) ? 'premium' : user.plan;
 
 export const IS_PUBLIC = 'isPublic';
 
