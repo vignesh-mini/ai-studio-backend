@@ -1,0 +1,131 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // Neon/Supabase: pooled URL for the app, direct URL for migrations.
+  directUrl = env("DIRECT_URL")
+}
+
+enum Plan {
+  free
+  premium
+}
+
+enum Task {
+  chat
+  image
+  video
+  audio
+}
+
+enum Role {
+  user
+  assistant
+}
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  name          String
+  passwordHash  String?
+  plan          Plan           @default(free)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  refreshTokens RefreshToken[]
+  conversations Conversation[]
+  usageLogs     UsageLog[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+/// One row per upstream provider. The API key itself never lives in the database:
+/// `apiKeyEnv` names the environment variable that holds it.
+model AiProvider {
+  id        String    @id
+  name      String
+  baseUrl   String
+  apiKeyEnv String
+  enabled   Boolean   @default(true)
+  models    AiModel[]
+
+  @@map("ai_providers")
+}
+
+/// The catalogue the app shows. `providerModel` is the provider's own model name, so a
+/// model can be repointed (e.g. a newer Gemini Flash) without an app release.
+model AiModel {
+  id            String     @id
+  name          String
+  providerId    String
+  providerModel String
+  task          Task
+  description   String
+  tier          Plan       @default(free)
+  capabilities  String[]
+  enabled       Boolean    @default(true)
+  sortOrder     Int        @default(0)
+  provider      AiProvider @relation(fields: [providerId], references: [id])
+
+  @@map("ai_models")
+}
+
+model Conversation {
+  /// Created by the app, so a chat can start streaming before the first round trip.
+  id        String    @id
+  userId    String
+  title     String
+  modelId   String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  Message[]
+
+  @@index([userId, updatedAt])
+  @@map("conversations")
+}
+
+model Message {
+  id             String       @id
+  conversationId String
+  role           Role
+  content        String
+  modelId        String?
+  status         String       @default("done")
+  attachments    Json?
+  createdAt      DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("messages")
+}
+
+model UsageLog {
+  id           String   @id @default(cuid())
+  userId       String
+  task         Task
+  modelId      String
+  providerId   String
+  inputTokens  Int      @default(0)
+  outputTokens Int      @default(0)
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("usage_logs")
+}

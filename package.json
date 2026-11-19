@@ -1,7 +1,7 @@
 {
   "name": "backend",
   "version": "0.0.1",
-  "description": "",
+  "description": "AI Studio backend – API gateway for chat, image, video, document and voice AI",
   "author": "",
   "private": true,
   "license": "UNLICENSED",
@@ -19,7 +19,12 @@
     "test:watch": "vitest",
     "test:cov": "vitest run --coverage",
     "test:debug": "vitest --inspect-brk --no-file-parallelism",
-    "test:e2e": "vitest run --config ./vitest.config.e2e.ts"
+    "test:e2e": "vitest run --config ./vitest.config.e2e.ts",
+    "postinstall": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:seed": "prisma db seed",
+    "db:studio": "prisma studio"
   },
   "dependencies": {
     "@nestjs/common": "^12.0.1",
@@ -53,5 +58,8 @@
     "typescript": "^6.0.2",
     "vite": "^8.0.0",
     "vitest": "^4.1.2"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.ts"
   }
 }
