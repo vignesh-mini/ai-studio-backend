@@ -62,6 +62,13 @@ export class ChatController {
     return this.chat.getMessages(user.id, id);
   }
 
+  /** Clears the user's whole chat history (messages cascade). */
+  @Delete('conversations')
+  @HttpCode(204)
+  async removeAll(@CurrentUser() user: AuthUser) {
+    await this.chat.deleteAllConversations(user.id);
+  }
+
   @Delete('conversations/:id')
   @HttpCode(204)
   remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {

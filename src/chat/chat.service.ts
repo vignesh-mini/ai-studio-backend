@@ -168,6 +168,10 @@ export class ChatService {
     await this.prisma.conversation.delete({ where: { id: conversationId } });
   }
 
+  deleteAllConversations(userId: string) {
+    return this.prisma.conversation.deleteMany({ where: { userId } });
+  }
+
   private async assertOwner(userId: string, conversationId: string) {
     const conversation = await this.prisma.conversation.findUnique({
       where: { id: conversationId },

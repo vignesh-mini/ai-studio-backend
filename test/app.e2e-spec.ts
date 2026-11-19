@@ -49,6 +49,11 @@ describe('API (e2e)', () => {
       .send({ email: 'not-an-email', password: '1' })
       .expect(400));
 
+  it('requires a token to clear chat history', () =>
+    request(app.getHttpServer())
+      .delete('/api/v1/chat/conversations')
+      .expect(401));
+
   it('protects image generation and job status', async () => {
     await request(app.getHttpServer())
       .post('/api/v1/images/generate')
