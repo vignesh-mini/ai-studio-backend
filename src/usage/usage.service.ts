@@ -57,6 +57,19 @@ export class UsageService {
     }
   }
 
+  /** Checks room for `count` more images today (each generated image counts). */
+  async assertImageQuota(userId: string, plan: Plan, count: number) {
+    const limit = MEDIA_LIMITS[plan].images;
+    const used = await this.countToday(userId, 'image');
+    if (used + count > limit) {
+      const left = Math.max(0, limit - used);
+      throw new HttpException(
+        `Daily image limit reached: ${left} of ${limit} left today. It resets at midnight UTC.`,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+  }
+
   record(entry: UsageRecord) {
     return this.prisma.usageLog.create({ data: entry });
   }

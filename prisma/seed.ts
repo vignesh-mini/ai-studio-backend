@@ -32,6 +32,14 @@ const providers = [
     apiKeyEnv: 'MISTRAL_API_KEY',
   },
   {
+    id: 'cloudflare',
+    name: 'Cloudflare Workers AI',
+    // {CLOUDFLARE_ACCOUNT_ID} is filled in from .env at request time.
+    baseUrl:
+      'https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/run',
+    apiKeyEnv: 'CLOUDFLARE_API_TOKEN',
+  },
+  {
     id: 'fal',
     name: 'fal.ai',
     baseUrl: 'https://fal.run',
@@ -60,6 +68,7 @@ type Seed = {
   description: string;
   tier?: 'free' | 'premium';
   capabilities: string[];
+  enabled?: boolean;
 };
 
 // `providerModel` values change as providers release new versions; check each console
@@ -136,12 +145,23 @@ const models: Seed[] = [
   {
     id: 'flux-schnell',
     name: 'FLUX.1 schnell',
-    providerId: 'fal',
-    providerModel: 'fal-ai/flux/schnell',
+    providerId: 'cloudflare',
+    providerModel: '@cf/black-forest-labs/flux-1-schnell',
     task: 'image',
-    description: 'Fast, photorealistic text-to-image.',
-    capabilities: ['image-edit'],
+    description: 'Fast, photorealistic text-to-image. Square images.',
+    capabilities: [],
   },
+  {
+    id: 'lucid-origin',
+    name: 'Lucid Origin',
+    providerId: 'cloudflare',
+    providerModel: '@cf/leonardo/lucid-origin',
+    task: 'image',
+    description: 'High-detail images in any aspect ratio.',
+    tier: 'premium',
+    capabilities: ['aspect-ratio'],
+  },
+  // Kept for history but hidden until adapters exist for these providers.
   {
     id: 'flux-dev',
     name: 'FLUX.1 dev',
@@ -150,7 +170,8 @@ const models: Seed[] = [
     task: 'image',
     description: 'Higher detail and prompt adherence.',
     tier: 'premium',
-    capabilities: ['image-edit'],
+    capabilities: ['aspect-ratio'],
+    enabled: false,
   },
   {
     id: 'sdxl',
@@ -159,7 +180,8 @@ const models: Seed[] = [
     providerModel: 'stabilityai/stable-diffusion-xl-base-1.0',
     task: 'image',
     description: 'Versatile styles, image-to-image variations.',
-    capabilities: ['image-edit'],
+    capabilities: ['aspect-ratio'],
+    enabled: false,
   },
   {
     id: 'wan-2.2',
@@ -209,7 +231,12 @@ for (const provider of providers) {
   });
 }
 for (const [index, model] of models.entries()) {
-  const data = { ...model, tier: model.tier ?? 'free', sortOrder: index };
+  const data = {
+    ...model,
+    tier: model.tier ?? 'free',
+    enabled: model.enabled ?? true,
+    sortOrder: index,
+  };
   await prisma.aiModel.upsert({
     where: { id: model.id },
     create: data,

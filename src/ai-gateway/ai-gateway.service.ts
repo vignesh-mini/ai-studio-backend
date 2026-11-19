@@ -11,6 +11,7 @@ import {
   ModelsService,
 } from '../models/models.service.js';
 import { rankAutoModels } from './auto-router.js';
+import { generateCloudflareImage, IMAGE_SIZES } from './cloudflare-images.js';
 import {
   type ChatTurn,
   ProviderError,
@@ -20,6 +21,7 @@ import {
 export interface ResolvedModel {
   model: CatalogueModel;
   apiKey: string;
+  baseUrl: string;
   /** Auto only: models to try in order if this one is overloaded or down. */
   fallbacks: ResolvedModel[];
 }
@@ -70,8 +72,22 @@ export class AiGatewayService {
       return { ...first, fallbacks: rest };
     }
 
-    const modelId = requestedId;
-    const model = chatModels.find((m) => m.id === modelId);
+    return this.resolveExplicit(chatModels, requestedId, plan);
+  }
+
+  async resolveImageModel(modelId: string, plan: Plan): Promise<ResolvedModel> {
+    const imageModels = (await this.models.catalogue()).filter(
+      (m) => m.task === 'image',
+    );
+    return this.resolveExplicit(imageModels, modelId, plan);
+  }
+
+  private resolveExplicit(
+    models: CatalogueModel[],
+    modelId: string,
+    plan: Plan,
+  ): ResolvedModel {
+    const model = models.find((m) => m.id === modelId);
     if (!model || model.id === AUTO_MODEL_ID)
       throw new NotFoundException(`Unknown model "${modelId}"`);
     if (model.tier === 'premium' && plan === 'free') {
@@ -79,30 +95,72 @@ export class AiGatewayService {
         `${model.name} is available on the Premium plan`,
       );
     }
-    const apiKey = this.models.apiKeyFor(model.provider);
-    if (!model.available || !apiKey) {
+    if (!model.available) {
       throw new ServiceUnavailableException(
         `${model.name} is not available right now`,
       );
     }
-    return { model, apiKey, fallbacks: [] };
+    return this.toResolved(model);
   }
 
   private toResolved(model: CatalogueModel): ResolvedModel {
     return {
       model,
       apiKey: this.models.apiKeyFor(model.provider)!,
+      baseUrl: this.models.baseUrlFor(model.provider)!,
       fallbacks: [],
     };
   }
 
+  /** Non-streaming completion with the same fallback chain as Auto chat. */
+  async completeText(resolved: ResolvedModel, messages: ChatTurn[]) {
+    const attempts = [resolved, ...resolved.fallbacks];
+    for (const [index, attempt] of attempts.entries()) {
+      try {
+        let text = '';
+        for await (const delta of this.streamChat(
+          attempt,
+          messages,
+          AbortSignal.timeout(30_000),
+        )) {
+          text += delta;
+        }
+        return text;
+      } catch (error) {
+        if (index === attempts.length - 1 || !isRetryableProviderError(error)) {
+          throw error;
+        }
+      }
+    }
+    throw new ServiceUnavailableException();
+  }
+
+  generateImage(
+    { model, apiKey, baseUrl }: ResolvedModel,
+    options: { prompt: string; steps: number; aspectRatio: string },
+  ) {
+    // Models without the capability (e.g. FLUX.1 schnell) only produce square images.
+    const size = model.capabilities.includes('aspect-ratio')
+      ? IMAGE_SIZES[options.aspectRatio]
+      : undefined;
+    return generateCloudflareImage({
+      baseUrl,
+      apiKey,
+      model: model.providerModel,
+      prompt: options.prompt,
+      steps: options.steps,
+      ...size,
+      signal: AbortSignal.timeout(120_000),
+    });
+  }
+
   streamChat(
-    { model, apiKey }: ResolvedModel,
+    { model, apiKey, baseUrl }: ResolvedModel,
     messages: ChatTurn[],
     signal: AbortSignal,
   ) {
     return streamChatCompletion({
-      baseUrl: model.provider.baseUrl,
+      baseUrl,
       apiKey,
       model: model.providerModel,
       messages,

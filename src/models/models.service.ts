@@ -23,6 +23,23 @@ export class ModelsService {
       : undefined;
   }
 
+  /**
+   * Resolves `{ENV_NAME}` placeholders in a provider's base URL, e.g. the Cloudflare
+   * account id. Returns undefined if any referenced variable is missing.
+   */
+  baseUrlFor(provider: AiProvider): string | undefined {
+    let missing = false;
+    const url = provider.baseUrl.replace(
+      /\{([A-Z0-9_]+)\}/g,
+      (_, name: string) => {
+        const value = this.config.get<string>(name);
+        if (!value) missing = true;
+        return value ?? '';
+      },
+    );
+    return missing ? undefined : url;
+  }
+
   /** Every enabled model with an `available` flag computed from provider config. */
   async catalogue(): Promise<CatalogueModel[]> {
     const models = await this.prisma.aiModel.findMany({
@@ -58,9 +75,12 @@ export class ModelsService {
   }
 
   private isConfigured(model: AiModel & { provider: AiProvider }) {
-    // Image/video/audio adapters arrive in Phases 4–6; until then the app serves those
+    // Video/audio adapters arrive in Phases 5–6; until then the app serves those
     // features from its mock layer, so their catalogue entries stay selectable.
-    if (model.task !== 'chat' || model.id === AUTO_MODEL_ID) return true;
-    return !!this.apiKeyFor(model.provider);
+    if (model.task === 'video' || model.task === 'audio') return true;
+    if (model.id === AUTO_MODEL_ID) return true;
+    return (
+      !!this.apiKeyFor(model.provider) && !!this.baseUrlFor(model.provider)
+    );
   }
 }

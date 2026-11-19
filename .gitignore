@@ -16,3 +16,6 @@ coverage/
 .DS_Store
 .idea/
 .vscode/
+
+# generated media in local development (STORAGE_DIR)
+storage/

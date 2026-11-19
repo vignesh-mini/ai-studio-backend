@@ -13,7 +13,11 @@ describe('API (e2e)', () => {
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(PrismaService)
-      .useValue({ $connect: vi.fn(), $disconnect: vi.fn() })
+      .useValue({
+        $connect: vi.fn(),
+        $disconnect: vi.fn(),
+        generationJob: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      })
       .compile();
 
     app = moduleRef.createNestApplication();
@@ -44,6 +48,23 @@ describe('API (e2e)', () => {
       .post('/api/v1/auth/login')
       .send({ email: 'not-an-email', password: '1' })
       .expect(400));
+
+  it('protects image generation and job status', async () => {
+    await request(app.getHttpServer())
+      .post('/api/v1/images/generate')
+      .send({})
+      .expect(401);
+    await request(app.getHttpServer()).get('/api/v1/jobs/abc').expect(401);
+  });
+
+  it('serves media only for well-formed keys', async () => {
+    await request(app.getHttpServer())
+      .get('/api/v1/media/..%2F.env')
+      .expect(404);
+    await request(app.getHttpServer())
+      .get(`/api/v1/media/${'a'.repeat(48)}.jpg`)
+      .expect(404);
+  });
 
   it('reports social sign-in as not implemented yet', () =>
     request(app.getHttpServer()).post('/api/v1/auth/google').expect(501));

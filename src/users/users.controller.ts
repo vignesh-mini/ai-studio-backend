@@ -7,11 +7,15 @@ import {
 } from '@nestjs/common';
 import { type AuthUser, CurrentUser } from '../auth/decorators.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { StorageService } from '../storage/storage.service.js';
 import { toUserDto } from './user.mapper.js';
 
 @Controller('profile')
 export class UsersController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storage: StorageService,
+  ) {}
 
   @Get()
   async profile(@CurrentUser() user: AuthUser) {
@@ -24,6 +28,12 @@ export class UsersController {
   @Delete('data')
   @HttpCode(204)
   async deleteData(@CurrentUser() user: AuthUser) {
+    const assets = await this.prisma.generatedAsset.findMany({
+      where: { userId: user.id },
+      select: { storageKey: true },
+    });
     await this.prisma.user.delete({ where: { id: user.id } });
+    // Rows are gone via cascade; the media files must be removed explicitly.
+    await Promise.all(assets.map((a) => this.storage.remove(a.storageKey)));
   }
 }
