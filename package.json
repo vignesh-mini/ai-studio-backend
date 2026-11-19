@@ -1,7 +1,7 @@
 {
   "name": "backend",
   "version": "0.0.1",
-  "description": "AI Studio backend – API gateway for chat, image, video, document and voice AI",
+  "description": "AI Studio backend \u2013 API gateway for chat, image, video, document and voice AI",
   "author": "",
   "private": true,
   "license": "UNLICENSED",
@@ -27,6 +27,7 @@
     "db:studio": "prisma studio"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1172.0",
     "@nestjs/common": "^12.0.1",
     "@nestjs/config": "^12.1.1",
     "@nestjs/core": "^12.0.1",
@@ -61,5 +62,8 @@
   },
   "prisma": {
     "seed": "node prisma/seed.ts"
+  },
+  "engines": {
+    "node": ">=22.18"
   }
 }

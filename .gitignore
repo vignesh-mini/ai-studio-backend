@@ -18,4 +18,4 @@ coverage/
 .vscode/
 
 # generated media in local development (STORAGE_DIR)
-storage/
+/storage/
