@@ -57,12 +57,15 @@ class S3Driver implements StorageDriver {
   private readonly client: S3Client;
 
   constructor(private readonly bucket: string, config: ConfigService) {
+    // Dashboard pastes often carry stray spaces or quotes, which break request signing.
+    const setting = (key: string) =>
+      config.getOrThrow<string>(key).trim().replace(/^["']|["']$/g, '');
     this.client = new S3Client({
-      endpoint: config.getOrThrow<string>('S3_ENDPOINT'),
-      region: config.get<string>('S3_REGION') ?? 'auto',
+      endpoint: setting('S3_ENDPOINT'),
+      region: config.get<string>('S3_REGION')?.trim() || 'auto',
       credentials: {
-        accessKeyId: config.getOrThrow<string>('S3_ACCESS_KEY_ID'),
-        secretAccessKey: config.getOrThrow<string>('S3_SECRET_ACCESS_KEY'),
+        accessKeyId: setting('S3_ACCESS_KEY_ID'),
+        secretAccessKey: setting('S3_SECRET_ACCESS_KEY'),
       },
       // Supabase and most non-AWS providers expect bucket-in-path URLs.
       forcePathStyle: true,
