@@ -115,9 +115,10 @@ const models: Seed[] = [
   },
   {
     id: 'openrouter-llama-free',
-    name: 'Llama 3.3 70B (free)',
+    // Id kept from the retired free Llama 3.3 so saved chats still resolve.
+    name: 'Nemotron 3 Ultra (free)',
     providerId: 'openrouter',
-    providerModel: 'meta-llama/llama-3.3-70b-instruct:free',
+    providerModel: 'nvidia/nemotron-3-ultra-550b-a55b:free',
     task: 'chat',
     description: 'Free community model served through OpenRouter.',
     capabilities: ['reasoning'],
