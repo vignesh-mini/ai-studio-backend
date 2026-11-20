@@ -22,6 +22,7 @@ import {
   ProviderError,
   streamChatCompletion,
 } from './openai-compatible.js';
+import { type AudioFile, synthesizeSpeech, transcribeAudio } from './speech.js';
 
 export interface ResolvedModel {
   model: CatalogueModel;
@@ -129,8 +130,55 @@ export class AiGatewayService {
     };
   }
 
+  /**
+   * The speech model with the given capability. Voice has no model picker, so the
+   * first configured one in catalogue order is used.
+   */
+  async resolveAudioModel(
+    capability: 'transcription' | 'speech',
+  ): Promise<ResolvedModel> {
+    const model = (await this.models.catalogue()).find(
+      (m) =>
+        m.task === 'audio' &&
+        m.available &&
+        m.capabilities.includes(capability),
+    );
+    if (!model) {
+      throw new ServiceUnavailableException(
+        capability === 'transcription'
+          ? 'Speech recognition is not configured on the server.'
+          : 'Text-to-speech is not configured on the server.',
+      );
+    }
+    return this.toResolved(model);
+  }
+
+  transcribe({ model, apiKey, baseUrl }: ResolvedModel, file: AudioFile) {
+    return transcribeAudio({
+      baseUrl,
+      apiKey,
+      model: model.providerModel,
+      file,
+      signal: AbortSignal.timeout(60_000),
+    });
+  }
+
+  synthesize({ model, apiKey, baseUrl }: ResolvedModel, text: string) {
+    return synthesizeSpeech({
+      baseUrl,
+      apiKey,
+      model: model.providerModel,
+      text,
+      signal: AbortSignal.timeout(60_000),
+    });
+  }
+
   /** Non-streaming completion with the same fallback chain as Auto chat. */
-  async completeText(resolved: ResolvedModel, messages: ChatTurn[]) {
+  async completeText(
+    resolved: ResolvedModel,
+    messages: ChatTurn[],
+    timeoutMs = 25_000,
+  ) {
     const attempts = [resolved, ...resolved.fallbacks];
     for (const [index, attempt] of attempts.entries()) {
       try {
@@ -138,7 +186,7 @@ export class AiGatewayService {
         for await (const delta of this.streamChatGuarded(
           attempt,
           messages,
-          AbortSignal.timeout(25_000),
+          AbortSignal.timeout(timeoutMs),
           12_000,
         )) {
           text += delta;

@@ -4,10 +4,12 @@ import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AiGatewayModule } from './ai-gateway/ai-gateway.module.js';
 import { AppController } from './app.controller.js';
+import { AudioModule } from './audio/audio.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { ChatModule } from './chat/chat.module.js';
 import { ImagesModule } from './images/images.module.js';
 import { validateEnv } from './config/env.js';
+import { DocumentsModule } from './documents/documents.module.js';
 import { ModelsModule } from './models/models.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { StorageModule } from './storage/storage.module.js';
@@ -30,6 +32,8 @@ import { VideosModule } from './videos/videos.module.js';
     ChatModule,
     ImagesModule,
     VideosModule,
+    AudioModule,
+    DocumentsModule,
   ],
   controllers: [AppController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

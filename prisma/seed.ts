@@ -270,6 +270,15 @@ const models: Seed[] = [
     description: 'Speech-to-text transcription.',
     capabilities: ['transcription'],
   },
+  {
+    id: 'aura-2',
+    name: 'Deepgram Aura 2',
+    providerId: 'cloudflare',
+    providerModel: '@cf/deepgram/aura-2-en',
+    task: 'audio',
+    description: 'Natural-sounding English text-to-speech for spoken replies.',
+    capabilities: ['speech'],
+  },
 ];
 
 for (const provider of providers) {

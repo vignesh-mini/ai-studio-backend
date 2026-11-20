@@ -53,6 +53,7 @@ model User {
   usageLogs     UsageLog[]
   jobs          GenerationJob[]
   assets        GeneratedAsset[]
+  documents     Document[]
 
   @@map("users")
 }
@@ -188,4 +189,22 @@ model GeneratedAsset {
 
   @@index([userId, createdAt])
   @@map("generated_assets")
+}
+
+/// Text extracted from an uploaded file. The original file is not kept.
+model Document {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  mimeType  String
+  size      Int
+  pages     Int
+  text      String
+  summary   String?
+  keyPoints String[]
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("documents")
 }

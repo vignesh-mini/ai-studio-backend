@@ -1,7 +1,7 @@
 {
   "name": "backend",
   "version": "0.0.1",
-  "description": "AI Studio backend \u2013 API gateway for chat, image, video, document and voice AI",
+  "description": "AI Studio backend – API gateway for chat, image, video, document and voice AI",
   "author": "",
   "private": true,
   "license": "UNLICENSED",
@@ -39,7 +39,8 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "unpdf": "2.2.1"
   },
   "devDependencies": {
     "@nestjs/cli": "^12.0.0",
@@ -47,6 +48,7 @@
     "@nestjs/schematics": "^12.0.0",
     "@nestjs/testing": "^12.0.1",
     "@types/express": "^5.0.0",
+    "@types/multer": "^2.3.0",
     "@types/node": "^24.0.0",
     "@types/supertest": "^7.0.0",
     "@vitest/coverage-v8": "^4.1.2",
