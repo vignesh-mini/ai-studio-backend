@@ -130,6 +130,8 @@ const models: Seed[] = [
     task: 'chat',
     description: 'Efficient model for coding and everyday questions.',
     capabilities: ['coding'],
+    // Mistral's API needs a paid plan; enable once a key is added.
+    enabled: false,
   },
   {
     id: 'gemini-pro',
