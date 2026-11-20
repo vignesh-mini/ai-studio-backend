@@ -75,9 +75,9 @@ export class ModelsService {
   }
 
   private isConfigured(model: AiModel & { provider: AiProvider }) {
-    // Video/audio adapters arrive in Phases 5–6; until then the app serves those
-    // features from its mock layer, so their catalogue entries stay selectable.
-    if (model.task === 'video' || model.task === 'audio') return true;
+    // The audio adapter arrives in Phase 6; until then the app serves voice from its
+    // mock layer, so those catalogue entries stay selectable.
+    if (model.task === 'audio') return true;
     if (model.id === AUTO_MODEL_ID) return true;
     return (
       !!this.apiKeyFor(model.provider) && !!this.baseUrlFor(model.provider)

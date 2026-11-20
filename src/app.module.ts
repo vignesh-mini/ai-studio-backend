@@ -13,6 +13,7 @@ import { PrismaModule } from './prisma/prisma.module.js';
 import { StorageModule } from './storage/storage.module.js';
 import { UsageModule } from './usage/usage.module.js';
 import { UsersModule } from './users/users.module.js';
+import { VideosModule } from './videos/videos.module.js';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { UsersModule } from './users/users.module.js';
     UsageModule,
     ChatModule,
     ImagesModule,
+    VideosModule,
   ],
   controllers: [AppController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

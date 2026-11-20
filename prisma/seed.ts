@@ -39,10 +39,19 @@ const providers = [
       'https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/run',
     apiKeyEnv: 'CLOUDFLARE_API_TOKEN',
   },
+  // Same OpenRouter account, but pay-per-use models need their own opt-in key, so
+  // adding credit is a deliberate step and the free key never spends money.
+  {
+    id: 'openrouter-paid',
+    name: 'OpenRouter',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    apiKeyEnv: 'OPENROUTER_PAID_API_KEY',
+  },
   {
     id: 'fal',
     name: 'fal.ai',
-    baseUrl: 'https://fal.run',
+    // Queue API: video takes minutes, longer than a single HTTP request should wait.
+    baseUrl: 'https://queue.fal.run',
     apiKeyEnv: 'FAL_KEY',
   },
   {
@@ -145,6 +154,39 @@ const models: Seed[] = [
     tier: 'premium',
     capabilities: ['reasoning', 'vision', 'long-context', 'documents'],
   },
+  // Pay-per-use (the 'paid' tag). Premium only, never chosen by Auto.
+  {
+    id: 'claude-sonnet',
+    name: 'Claude Sonnet 5.5',
+    providerId: 'openrouter-paid',
+    providerModel: 'anthropic/claude-sonnet-5.5',
+    task: 'chat',
+    description:
+      'Top-tier writing, coding and analysis. About $2 / $10 per 1M tokens.',
+    tier: 'premium',
+    capabilities: ['paid', 'coding', 'reasoning', 'long-context'],
+  },
+  {
+    id: 'gpt-sol',
+    name: 'GPT-6.1 Sol',
+    providerId: 'openrouter-paid',
+    providerModel: 'openai/gpt-6.1-sol',
+    task: 'chat',
+    description:
+      "OpenAI's flagship for complex tasks. About $2 / $10 per 1M tokens.",
+    tier: 'premium',
+    capabilities: ['paid', 'reasoning', 'coding'],
+  },
+  {
+    id: 'claude-haiku',
+    name: 'Claude Haiku 5.5',
+    providerId: 'openrouter-paid',
+    providerModel: 'anthropic/claude-haiku-5.5',
+    task: 'chat',
+    description: 'Fast and low cost. About $0.10 / $0.50 per 1M tokens.',
+    tier: 'premium',
+    capabilities: ['paid', 'fast'],
+  },
   {
     id: 'flux-schnell',
     name: 'FLUX.1 schnell',
@@ -186,24 +228,26 @@ const models: Seed[] = [
     capabilities: ['aspect-ratio'],
     enabled: false,
   },
+  // Video has no free API anywhere; these run on fal.ai credit once FAL_KEY is set.
+  {
+    id: 'ltx-video',
+    name: 'LTX Video',
+    providerId: 'fal',
+    providerModel: 'fal-ai/ltx-video-13b-distilled',
+    task: 'video',
+    description: 'Fast 720p clips. About $0.04 per video.',
+    tier: 'premium',
+    capabilities: ['paid', 'text-to-video', 'image-to-video'],
+  },
   {
     id: 'wan-2.2',
     name: 'Wan 2.2',
     providerId: 'fal',
     providerModel: 'fal-ai/wan/v2.2-a14b/text-to-video',
     task: 'video',
-    description: 'Apache 2.0 open weights. Text-to-video and image-to-video.',
-    capabilities: ['text-to-video', 'image-to-video'],
-  },
-  {
-    id: 'ltx-video',
-    name: 'LTX Video',
-    providerId: 'replicate',
-    providerModel: 'lightricks/ltx-video',
-    task: 'video',
-    description: 'Fast video generation with image-to-video support.',
+    description: 'Higher-quality motion at 480p. About $0.04 per second.',
     tier: 'premium',
-    capabilities: ['text-to-video', 'image-to-video'],
+    capabilities: ['paid', 'text-to-video', 'image-to-video'],
   },
   {
     id: 'hunyuan-video',
@@ -214,6 +258,8 @@ const models: Seed[] = [
     description: 'High-quality cinematic text-to-video.',
     tier: 'premium',
     capabilities: ['text-to-video'],
+    // No longer offered on fal.ai.
+    enabled: false,
   },
   {
     id: 'whisper-large-v3',

@@ -13,6 +13,11 @@ import {
 import { type Intent, rankAutoModels } from './auto-router.js';
 import { generateCloudflareImage, IMAGE_SIZES } from './cloudflare-images.js';
 import {
+  falVideoInput,
+  generateFalVideo,
+  type VideoOptions,
+} from './fal-video.js';
+import {
   type ChatTurn,
   ProviderError,
   streamChatCompletion,
@@ -37,6 +42,7 @@ export const isRetryableProviderError = (error: unknown) =>
 // Optional attribution headers some providers ask for.
 const PROVIDER_HEADERS: Record<string, Record<string, string>> = {
   openrouter: { 'X-Title': 'AI Studio' },
+  'openrouter-paid': { 'X-Title': 'AI Studio' },
 };
 
 /**
@@ -84,6 +90,13 @@ export class AiGatewayService {
       (m) => m.task === 'image',
     );
     return this.resolveExplicit(imageModels, modelId, plan);
+  }
+
+  async resolveVideoModel(modelId: string, plan: Plan): Promise<ResolvedModel> {
+    const videoModels = (await this.models.catalogue()).filter(
+      (m) => m.task === 'video',
+    );
+    return this.resolveExplicit(videoModels, modelId, plan);
   }
 
   private resolveExplicit(
@@ -197,6 +210,23 @@ export class AiGatewayService {
       steps: options.steps,
       ...size,
       signal: AbortSignal.timeout(120_000),
+    });
+  }
+
+  generateVideo(
+    { model, apiKey, baseUrl }: ResolvedModel,
+    options: VideoOptions,
+    onProgress?: (progress: number) => void,
+  ) {
+    const { endpoint, input } = falVideoInput(model.providerModel, options);
+    return generateFalVideo({
+      baseUrl,
+      apiKey,
+      endpoint,
+      input,
+      onProgress,
+      // Queue waits plus generation can take several minutes at busy times.
+      signal: AbortSignal.timeout(15 * 60_000),
     });
   }
 

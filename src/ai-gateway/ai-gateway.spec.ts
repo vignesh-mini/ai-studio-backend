@@ -3,6 +3,7 @@ import {
   isRetryableProviderError,
 } from './ai-gateway.service.js';
 import { detectIntent, pickAutoModel, rankAutoModels } from './auto-router.js';
+import { falVideoInput } from './fal-video.js';
 import { ProviderError, SseDeltaParser } from './openai-compatible.js';
 
 describe('SseDeltaParser', () => {
@@ -58,6 +59,16 @@ describe('auto router', () => {
     expect(pickAutoModel('prove this theorem', models, 'premium')).toBe(
       'gemini-pro',
     );
+  });
+
+  it('never routes anyone to pay-per-use models', () => {
+    const withPaid = [
+      { id: 'claude-sonnet', tier: 'premium' as const, capabilities: ['paid'] },
+      ...models,
+    ];
+    expect(
+      rankAutoModels('prove this theorem', withPaid, 'premium'),
+    ).not.toContain('claude-sonnet');
   });
 
   it('falls back to any configured model when preferred ones are missing', () => {
@@ -142,5 +153,37 @@ describe('streamChatGuarded', () => {
       text += delta;
     }
     expect(text).toBe('Hello');
+  });
+});
+
+describe('falVideoInput', () => {
+  const options = { prompt: 'waves', durationSec: 6, aspectRatio: '9:16' };
+
+  it('maps Wan to 16 fps at its cheapest resolution', () => {
+    const { endpoint, input } = falVideoInput(
+      'fal-ai/wan/v2.2-a14b/text-to-video',
+      options,
+    );
+    expect(endpoint).toBe('fal-ai/wan/v2.2-a14b/text-to-video');
+    expect(input).toMatchObject({
+      aspect_ratio: '9:16',
+      frames_per_second: 16,
+      num_frames: 97,
+      resolution: '480p',
+    });
+  });
+
+  it('switches to the image-to-video endpoint when a start frame is given', () => {
+    const image = { ...options, imageUrl: 'data:image/png;base64,AAAA' };
+    expect(
+      falVideoInput('fal-ai/wan/v2.2-a14b/text-to-video', image).endpoint,
+    ).toBe('fal-ai/wan/v2.2-a14b/image-to-video');
+    const ltx = falVideoInput('fal-ai/ltx-video-13b-distilled', image);
+    expect(ltx.endpoint).toBe('fal-ai/ltx-video-13b-distilled/image-to-video');
+    expect(ltx.input).toMatchObject({
+      image_url: image.imageUrl,
+      frame_rate: 24,
+      num_frames: 145,
+    });
   });
 });

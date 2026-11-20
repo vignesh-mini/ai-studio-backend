@@ -39,12 +39,14 @@ export function detectIntent(prompt: string): Intent {
 export interface RoutableModel {
   id: string;
   tier: Plan;
+  capabilities?: string[];
 }
 
 /**
  * Orders the models this user can use right now for the prompt: preferred models for
  * the intent first, then every other allowed model. The tail is the fallback chain used
- * when a provider is overloaded or down.
+ * when a provider is overloaded or down. Pay-per-use models are never picked here, so
+ * they only cost money when a user chooses one explicitly.
  */
 export function rankAutoModels(
   prompt: string,
@@ -54,6 +56,7 @@ export function rankAutoModels(
 ): string[] {
   const allowed = candidates
     .filter((m) => plan === 'premium' || m.tier === 'free')
+    .filter((m) => !m.capabilities?.includes('paid'))
     .map((m) => m.id);
   const preferred = PREFERENCES[intent].filter((id) => allowed.includes(id));
   return [...preferred, ...allowed.filter((id) => !preferred.includes(id))];

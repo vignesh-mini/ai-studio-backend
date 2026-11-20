@@ -10,7 +10,7 @@ import { type AuthUser, isOwner } from '../auth/decorators.js';
 import { dailyChatLimits } from '../config/env.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 
-// Image/video/document limits apply once those features run on the backend (Phases 4–6).
+// Document limits apply once that feature runs on the backend (Phase 6).
 const MEDIA_LIMITS: Record<
   Plan,
   { images: number; videos: number; documents: number }
@@ -68,6 +68,17 @@ export class UsageService {
       const left = Math.max(0, limit - used);
       throw new HttpException(
         `Daily image limit reached: ${left} of ${limit} left today. It resets at midnight UTC.`,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+  }
+
+  async assertVideoQuota(user: AuthUser) {
+    if (isOwner(user)) return;
+    const limit = MEDIA_LIMITS[user.plan].videos;
+    if ((await this.countToday(user.id, 'video')) >= limit) {
+      throw new HttpException(
+        `Daily limit of ${limit} videos reached. It resets at midnight UTC.`,
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
