@@ -1,17 +1,52 @@
-import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  type OnModuleInit,
+} from '@nestjs/common';
 import {
   AiGatewayService,
   type ResolvedModel,
 } from '../ai-gateway/ai-gateway.service.js';
+import sharp from 'sharp';
+import {
+  editOutputSize,
+  type GeneratedImage,
+  nearestAspectRatio,
+} from '../ai-gateway/cloudflare-images.js';
 import { type AuthUser, effectivePlan } from '../auth/decorators.js';
 import { JobQueue } from '../jobs/job-queue.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { StorageService } from '../storage/storage.service.js';
 import { UsageService } from '../usage/usage.service.js';
-import type { GenerateImageDto } from './images.dto.js';
+import type { EditImageDto, GenerateImageDto } from './images.dto.js';
+import { assertAllowedImagePrompt } from './prompt-policy.js';
 
 // FLUX.1 schnell accepts at most 8 steps; 4 is its default.
 const STEPS = { standard: 4, high: 8 } as const;
+
+/**
+ * Phone cameras store portraits sideways with an EXIF "rotate" tag that the editing
+ * model ignores, so the pixels are turned upright here. Large photos are also shrunk;
+ * the model works at about one megapixel anyway.
+ */
+async function uprightPhoto(data: Buffer) {
+  const { data: jpeg, info } = await sharp(data)
+    .rotate()
+    .resize({
+      width: 2048,
+      height: 2048,
+      fit: 'inside',
+      withoutEnlargement: true,
+    })
+    .jpeg({ quality: 92 })
+    .toBuffer({ resolveWithObject: true });
+  return {
+    image: { data: jpeg, mimeType: 'image/jpeg' } as GeneratedImage,
+    width: info.width,
+    height: info.height,
+  };
+}
 
 const ENHANCE_PROMPT =
   "Rewrite the user's image idea as one vivid prompt for a text-to-image model. " +
@@ -44,10 +79,16 @@ export class ImagesService implements OnModuleInit {
   }
 
   async createJob(user: AuthUser, dto: GenerateImageDto) {
+    assertAllowedImagePrompt(dto.prompt);
     const resolved = await this.gateway.resolveImageModel(
       dto.model,
       effectivePlan(user),
     );
+    if (resolved.model.capabilities.includes('edit')) {
+      throw new BadRequestException(
+        `${resolved.model.name} edits photos. Switch to Edit image mode.`,
+      );
+    }
     await this.usage.assertImageQuota(user, dto.count);
 
     const job = await this.prisma.generationJob.create({
@@ -63,35 +104,113 @@ export class ImagesService implements OnModuleInit {
         },
       },
     });
-    this.queue.enqueue(job.id, () => this.process(job.id, user, dto, resolved));
+    // Square-only models report 1:1 so the app shows the real shape.
+    const aspectRatio = resolved.model.capabilities.includes('aspect-ratio')
+      ? dto.aspectRatio
+      : '1:1';
+    this.queue.enqueue(job.id, () =>
+      this.process(job.id, user, resolved, dto, aspectRatio, () =>
+        this.gateway.generateImage(resolved, {
+          prompt: dto.prompt,
+          steps: STEPS[dto.quality],
+          aspectRatio,
+        }),
+      ),
+    );
     return { jobId: job.id, status: job.status };
   }
 
-  /** Generates images one by one so progress is visible and partial results survive. */
+  /** Edits an uploaded photo or a library image; results keep the source shape. */
+  async createEditJob(
+    user: AuthUser,
+    dto: EditImageDto,
+    file?: Express.Multer.File,
+  ) {
+    assertAllowedImagePrompt(dto.prompt);
+    const resolved = await this.gateway.resolveImageModel(
+      dto.model,
+      effectivePlan(user),
+    );
+    if (!resolved.model.capabilities.includes('edit')) {
+      throw new BadRequestException(
+        `${resolved.model.name} cannot edit photos. Pick an editing model.`,
+      );
+    }
+    const source = await this.editSource(user, dto.sourceAssetId, file);
+    await this.usage.assertImageQuota(user, dto.count);
+
+    const size = editOutputSize(source);
+    const aspectRatio = nearestAspectRatio(size.width, size.height);
+    const job = await this.prisma.generationJob.create({
+      data: {
+        userId: user.id,
+        type: 'image',
+        modelId: resolved.model.id,
+        prompt: dto.prompt.trim(),
+        params: {
+          mode: 'edit',
+          count: dto.count,
+          sourceAssetId: dto.sourceAssetId ?? null,
+          ...size,
+        },
+      },
+    });
+    this.queue.enqueue(job.id, () =>
+      this.process(job.id, user, resolved, dto, aspectRatio, () =>
+        this.gateway.editImage(resolved, {
+          prompt: dto.prompt,
+          image: source.image,
+          ...size,
+        }),
+      ),
+    );
+    return { jobId: job.id, status: job.status };
+  }
+
+  private async editSource(
+    user: AuthUser,
+    assetId?: string,
+    file?: Express.Multer.File,
+  ) {
+    if (file?.buffer.length) {
+      try {
+        return await uprightPhoto(file.buffer);
+      } catch {
+        throw new BadRequestException(
+          'This photo could not be read. Use a JPEG, PNG or WebP image.',
+        );
+      }
+    }
+    const asset = assetId
+      ? await this.prisma.generatedAsset.findUnique({ where: { id: assetId } })
+      : null;
+    if (!asset || asset.userId !== user.id || asset.type !== 'image') {
+      throw new BadRequestException(
+        'Choose a photo or a library image to edit.',
+      );
+    }
+    return uprightPhoto((await this.storage.get(asset.storageKey)).data);
+  }
+
+  /** Creates images one by one so progress is visible and partial results survive. */
   private async process(
     jobId: string,
     user: AuthUser,
-    dto: GenerateImageDto,
     resolved: ResolvedModel,
+    dto: { prompt: string; count: number },
+    aspectRatio: string,
+    make: () => Promise<GeneratedImage>,
   ) {
     await this.prisma.generationJob.update({
       where: { id: jobId },
       data: { status: 'processing', progress: 0.05 },
     });
-    // Square-only models report 1:1 so the app shows the real shape.
-    const aspectRatio = resolved.model.capabilities.includes('aspect-ratio')
-      ? dto.aspectRatio
-      : '1:1';
 
     let made = 0;
     let lastError: Error | undefined;
     for (let i = 0; i < dto.count; i++) {
       try {
-        const image = await this.gateway.generateImage(resolved, {
-          prompt: dto.prompt,
-          steps: STEPS[dto.quality],
-          aspectRatio,
-        });
+        const image = await make();
         const key = await this.storage.put(image.data, image.mimeType);
         await this.prisma.generatedAsset.create({
           data: {

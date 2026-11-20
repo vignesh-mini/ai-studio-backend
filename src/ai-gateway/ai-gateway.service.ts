@@ -11,7 +11,12 @@ import {
   ModelsService,
 } from '../models/models.service.js';
 import { type Intent, rankAutoModels } from './auto-router.js';
-import { generateCloudflareImage, IMAGE_SIZES } from './cloudflare-images.js';
+import {
+  editCloudflareImage,
+  type GeneratedImage,
+  generateCloudflareImage,
+  IMAGE_SIZES,
+} from './cloudflare-images.js';
 import {
   falVideoInput,
   generateFalVideo,
@@ -258,6 +263,24 @@ export class AiGatewayService {
       steps: options.steps,
       ...size,
       signal: AbortSignal.timeout(120_000),
+    });
+  }
+
+  editImage(
+    { model, apiKey, baseUrl }: ResolvedModel,
+    options: {
+      prompt: string;
+      image: GeneratedImage;
+      width: number;
+      height: number;
+    },
+  ) {
+    return editCloudflareImage({
+      baseUrl,
+      apiKey,
+      model: model.providerModel,
+      ...options,
+      signal: AbortSignal.timeout(180_000),
     });
   }
 

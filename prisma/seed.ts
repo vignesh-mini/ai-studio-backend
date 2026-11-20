@@ -206,6 +206,29 @@ const models: Seed[] = [
     tier: 'premium',
     capabilities: ['aspect-ratio'],
   },
+  // Photo editing (the 'edit' capability): an uploaded or library image plus an
+  // instruction. Output keeps the source's shape.
+  {
+    id: 'flux-2-klein',
+    name: 'FLUX.2 klein',
+    providerId: 'cloudflare',
+    providerModel: '@cf/black-forest-labs/flux-2-klein-9b',
+    task: 'image',
+    description:
+      'Fast photo edits that follow your instruction. About 8 seconds.',
+    capabilities: ['edit'],
+  },
+  {
+    id: 'flux-2-dev',
+    name: 'FLUX.2 dev',
+    providerId: 'cloudflare',
+    providerModel: '@cf/black-forest-labs/flux-2-dev',
+    task: 'image',
+    description:
+      'Most faithful edits: keeps framing and fine details. About 25 seconds.',
+    tier: 'premium',
+    capabilities: ['edit'],
+  },
   // Kept for history but hidden until adapters exist for these providers.
   {
     id: 'flux-dev',

@@ -1,7 +1,19 @@
-import { Body, Controller, HttpCode, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  HttpCode,
+  Post,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { Throttle } from '@nestjs/throttler';
 import { type AuthUser, CurrentUser } from '../auth/decorators.js';
-import { EnhancePromptDto, GenerateImageDto } from './images.dto.js';
+import {
+  EditImageDto,
+  EnhancePromptDto,
+  GenerateImageDto,
+} from './images.dto.js';
 import { ImagesService } from './images.service.js';
 
 @Controller()
@@ -14,6 +26,21 @@ export class ImagesController {
   @Throttle({ default: { ttl: 60_000, limit: 10 } })
   generate(@CurrentUser() user: AuthUser, @Body() dto: GenerateImageDto) {
     return this.images.createJob(user, dto);
+  }
+
+  /** Multipart: the instruction fields plus either an `image` file or sourceAssetId. */
+  @Post('images/edit')
+  @HttpCode(202)
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
+  @UseInterceptors(
+    FileInterceptor('image', { limits: { fileSize: 10 * 1024 * 1024 } }),
+  )
+  edit(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: EditImageDto,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    return this.images.createEditJob(user, dto, file);
   }
 
   @Post('prompts/enhance')
